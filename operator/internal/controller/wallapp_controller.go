@@ -19,23 +19,25 @@ package controller
 import (
 	"context"
 
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	appsv1 "github.com/sneikovich/wall-on-go/api/v1"
+	// logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	stenkav1 "github.com/sneikovich/wall-on-go/api/v1"
 )
 
-// WallAppReconciler reconciles a WallApp object
 type WallAppReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 }
-
-// +kubebuilder:rbac:groups=apps.stenka.app,resources=wallapps,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=apps.stenka.app,resources=wallapps/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=apps.stenka.app,resources=wallapps/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -43,21 +45,82 @@ type WallAppReconciler struct {
 // the WallApp object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
 // the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
-func (r *WallAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+func (r *WallAppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	l := log.FromContext(ctx)
+	wallApp := &stenkav1.WallApp{}
+	err := r.Get(ctx, req.NamespacedName, wallApp)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	l.Info("viju object Stenka", wallApp.Name)
+
+	found := &apps.Deployment{}
+	err = r.Get(ctx, client.ObjectKey{Name: wallApp.Name + "-app", Namespace: wallApp.Namespace}, found)
+	if err != nil && apierrors.IsNotFound(err) {
+		dep := r.deploymentForWall(wallApp)
+		l.Info("creating new deployment", "deployment namespace", dep.Namespace)
+
+		err = r.Create(ctx, dep)
+		if err != nil {
+			l.Error(err, "kak-to ne udalos(")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
+func (r *WallAppReconciler) deploymentForWall(m *stenkav1.WallApp) *apps.Deployment {
+	ls := map[string]string{"app": "wall-app", "wallapp-cr": m.Name}
+	replicas := m.Spec.Replicas
+
+	dep := &apps.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.Name + "-app",
+			Namespace: m.Namespace,
+		},
+		Spec: apps.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: ls,
+			},
+			Template: core.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: ls,
+				},
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
+						Image: m.Spec.Image,
+						Name:  "wall-app",
+						Ports: []core.ContainerPort{{
+							ContainerPort: 8080,
+							Name:          "http",
+						}},
+						Env: []core.EnvVar{
+							{
+								Name:  "DATABASE_URL",
+								Value: "postgres://postgres:" + m.Spec.DbPassword + "@postgres-service:5432/wall_db?sslmode=disable",
+							},
+						},
+					}},
+				},
+			},
+		},
+	}
+	ctrl.SetControllerReference(m, dep, r.Scheme)
+	return dep
+}
+
 func (r *WallAppReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&appsv1.WallApp{}).
+		For(&stenkav1.WallApp{}).
 		Named("wallapp").
 		Complete(r)
 }
