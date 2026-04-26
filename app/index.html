@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Go Wall {{time.Time()}}</title>
+        <style>
+            body {
+                font-family: sans-serif;
+                max-width: 500px;
+                margin: 50px auto;
+                line-height: 1.6;
+            }
+            .msg-bolt {
+                border-bottom: 1px solid #eee;
+                padding: 10px 0;
+                list-style: none;
+            }
+            input {
+                padding: 8px;
+                width: 70%;
+            }
+            button {
+                padding: 8px;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Стена сообщений (ОЛД СКУЛ лютый)</h1>
+
+        <form method="POST">
+            <input
+                type="text"
+                name="message"
+                placeholder="Напиши что-нибудь..."
+                required
+            />
+            <button type="submit">Отправить</button>
+        </form>
+
+        <ul>
+            {{range .}}
+            <li class="msg-bolt">
+                <strong>[{{.CreatedAt.Format "15:04:54"}}]</strong>:
+                {{.Content}}
+            </li>
+            {{else}}
+            <li>Сообщений пока нет. Будь первым!</li>
+            {{end}}
+        </ul>
+    </body>
+</html>
