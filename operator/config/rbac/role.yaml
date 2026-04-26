@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - apps.stenka.app
+  resources:
+  - wallapps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps.stenka.app
+  resources:
+  - wallapps/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - apps.stenka.app
+  resources:
+  - wallapps/status
+  verbs:
+  - get
+  - patch
+  - update
